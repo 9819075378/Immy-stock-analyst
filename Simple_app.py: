@@ -1,0 +1,125 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+
+# Page config
+st.set_page_config(
+    page_title="Simple Stock Analysis",
+    page_icon="📈",
+    layout="wide"
+)
+
+# App title and description
+st.title("📈 Simple Stock Analysis Tool")
+st.write("Enter a stock symbol to view its recent performance")
+
+# Input for stock symbol
+symbol = st.text_input("Enter Stock Symbol (e.g., RELIANCE.NS for Reliance or INFY.NS for Infosys):", "RELIANCE.NS")
+
+# Time period selection
+period = st.selectbox(
+    "Select Time Period:",
+    ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+    index=2
+)
+
+# Display loading message
+if symbol:
+    with st.spinner(f"Loading data for {symbol}..."):
+        try:
+            # Get stock data
+            stock = yf.Ticker(symbol)
+            info = stock.info
+            hist = stock.history(period=period)
+            
+            # Display basic info
+            st.subheader(f"{info.get('longName', symbol)} ({symbol})")
+            
+            # Show current price and change
+            if not hist.empty:
+                current = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2] if len(hist) > 1 else hist['Close'].iloc[0]
+                change = current - prev
+                percent_change = (change / prev) * 100
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Current Price", 
+                        f"₹{current:.2f}", 
+                        f"{change:.2f} ({percent_change:.2f}%)",
+                        delta_color="normal" if change >= 0 else "inverse"
+                    )
+                
+                with col2:
+                    st.metric("Volume", f"{hist['Volume'].iloc[-1]:,.0f}")
+                
+                with col3:
+                    st.metric("Period High", f"₹{hist['High'].max():.2f}")
+
+                # Create candlestick chart
+                st.subheader("Price Chart")
+                
+                fig = go.Figure()
+                fig.add_trace(go.Candlestick(
+                    x=hist.index,
+                    open=hist['Open'],
+                    high=hist['High'],
+                    low=hist['Low'],
+                    close=hist['Close'],
+                    name='Price'
+                ))
+                
+                # Layout updates
+                fig.update_layout(
+                    title=f"{symbol} Stock Price",
+                    xaxis_title="Date",
+                    yaxis_title="Price (₹)",
+                    xaxis_rangeslider_visible=False,
+                    template="plotly_dark"
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Volume chart
+                st.subheader("Trading Volume")
+                volume_fig = go.Figure()
+                volume_fig.add_trace(go.Bar(
+                    x=hist.index,
+                    y=hist['Volume'],
+                    marker_color='rgba(58, 134, 255, 0.8)'
+                ))
+                
+                volume_fig.update_layout(
+                    title=f"{symbol} Trading Volume",
+                    xaxis_title="Date",
+                    yaxis_title="Volume",
+                    template="plotly_dark"
+                )
+                
+                st.plotly_chart(volume_fig, use_container_width=True)
+                
+                # Summary statistics
+                st.subheader("Summary Statistics")
+                stats = pd.DataFrame({
+                    'Open': hist['Open'].describe(),
+                    'High': hist['High'].describe(),
+                    'Low': hist['Low'].describe(),
+                    'Close': hist['Close'].describe(),
+                    'Volume': hist['Volume'].describe(),
+                })
+                
+                st.dataframe(stats)
+                
+            else:
+                st.error("No data available for this stock symbol and period.")
+                
+        except Exception as e:
+            st.error(f"Error retrieving data: {e}")
+            st.info("Please check if the stock symbol is correct. For Indian stocks, add '.NS' (NSE) or '.BO' (BSE) suffix.")
+    
+# Footer
+st.markdown("---")
+st.caption("Data provided by Yahoo Finance. Not for commercial use.")
+st.caption("Created with Streamlit and Plotly")
